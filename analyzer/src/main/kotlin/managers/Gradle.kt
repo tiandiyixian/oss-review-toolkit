@@ -158,7 +158,7 @@ class Gradle(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConfig
             val rawPackage by lazy {
                 Package(
                         id = Identifier(
-                                provider = Maven.toString(),
+                                provider = "Maven",
                                 namespace = dependency.groupId,
                                 name = dependency.artifactId,
                                 version = dependency.version
@@ -199,7 +199,7 @@ class Gradle(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConfig
         }
 
         val transitiveDependencies = dependency.dependencies.map { parseDependency(it, packages, repositories) }
-        return PackageReference(Identifier(Maven.toString(), dependency.groupId, dependency.artifactId,
+        return PackageReference(Identifier("Maven", dependency.groupId, dependency.artifactId,
                 dependency.version), transitiveDependencies.toSortedSet(), errors)
     }
 

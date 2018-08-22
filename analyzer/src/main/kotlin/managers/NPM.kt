@@ -270,7 +270,7 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
 
             val module = Package(
                     id = Identifier(
-                            provider = NPM.toString(),
+                            provider = "NPM",
                             namespace = namespace,
                             name = name,
                             version = version
@@ -405,7 +405,7 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
             return packageInfo.toReference(dependencies)
         } else if (rootDir == startDir) {
             log.error { "Could not find module '$name'." }
-            return PackageReference(Identifier(toString(), "", name, ""), sortedSetOf(),
+            return PackageReference(Identifier("NPM", "", name, ""), sortedSetOf(),
                     listOf(Error(source = toString(), message = "Package was not installed.")))
         } else {
             var parent = startDir.parentFile.parentFile

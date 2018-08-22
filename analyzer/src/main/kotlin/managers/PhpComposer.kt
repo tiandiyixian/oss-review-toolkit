@@ -235,7 +235,7 @@ class PhpComposer(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryC
 
                 packages[rawName] = Package(
                         id = Identifier(
-                                provider = toString(),
+                                provider = "Packagist",
                                 namespace = rawName.substringBefore("/"),
                                 name = rawName.substringAfter("/"),
                                 version = version

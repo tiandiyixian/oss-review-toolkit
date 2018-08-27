@@ -3,6 +3,7 @@ apply plugin: 'application'
 
 applicationName = 'ort'
 mainClassName = 'com.here.ort.Main'
+applicationDefaultJvmArgs = ['-XX:+HeapDumpOnOutOfMemoryError']
 
 repositories {
     // Need to repeat the analyzer's custom repository definition here, see

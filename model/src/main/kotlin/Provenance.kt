@@ -71,13 +71,13 @@ data class Provenance(
      * True if this [Provenance] refers to the same source code as [pkg], assuming that it belongs to the package id.
      */
     fun matches(pkg: Package): Boolean {
-        // TODO: Only comparing the hashes of the source artifacts might be sufficient.
         if (sourceArtifact != null) {
             // Note that pkg.sourceArtifact is non-nullable.
             return sourceArtifact == pkg.sourceArtifact
         }
 
-        // If vcsInfo does not have a resolved revision it means that there was an issue with downloading the code.
+        // If the VCS information does not have a resolved revision it means that there was an issue with downloading
+        // the source code.
         if (vcsInfo?.resolvedRevision == null) {
             return false
         }

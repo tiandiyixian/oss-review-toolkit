@@ -128,6 +128,15 @@ abstract class CommandLineTool2 {
     fun run(workingDir: File?, vararg args: String) = run(*args, workingDir = workingDir)
 
     /**
+     * The version required of the command. By default no specific version is required.
+     */
+    open val versionRequirement = Requirement.buildNPM("*")
+
+    protected fun findRequiredVersion(): File {
+        getPathFromEnvironment(command())?.parentFile ?: bootstrap()
+    }
+
+    /**
      * The argument to pass to the command in order to get its version information.
      */
     protected open val versionArguments: String = "--version"
@@ -151,5 +160,19 @@ abstract class CommandLineTool2 {
         }
 
         return versionString ?: ""
+    }
+
+    fun bootstrap() {
+        return if (path != null && versionRequirement.isSatisfiedBy(getVersion()))
+
+        log.info { "Bootstrapping scanner '$this' as required version $requiredVersion was not found in PATH." }
+
+        scanner.path = bootstrap()
+
+        val bootstrappedVersion = scanner.getVersion()
+        if (bootstrappedVersion != requiredVersion) {
+            throw IOException("Bootstrapped scanner version $bootstrappedVersion " +
+                    "does not match expected version $requiredVersion.")
+        }
     }
 }

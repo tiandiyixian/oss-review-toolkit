@@ -32,13 +32,12 @@ import com.here.ort.model.ScannerDetails
 import com.here.ort.model.config.ScannerConfiguration
 import com.here.ort.model.jsonMapper
 import com.here.ort.scanner.LocalScanner
-import com.here.ort.scanner.ScanException
 import com.here.ort.scanner.AbstractScannerFactory
 import com.here.ort.scanner.HTTP_CACHE_PATH
-import com.here.ort.utils.CommandLineTool
+import com.here.ort.scanner.ScanException
+import com.here.ort.utils.CommandLineTool2
 import com.here.ort.utils.OkHttpClientHelper
 import com.here.ort.utils.OS
-import com.here.ort.utils.ProcessCapture
 import com.here.ort.utils.log
 import com.here.ort.utils.unpack
 
@@ -51,32 +50,30 @@ import okhttp3.Request
 
 import okio.Okio
 
-class BoyterLc(config: ScannerConfiguration) : LocalScanner(config) {
+object BoyterLcCommand : CommandLineTool2() {
+    override fun command(workingDir: File?) = if (OS.isWindows) "lc.exe" else "lc"
+
+    override fun transformVersion(output: String) =
+            // "lc --version" returns a string like "licensechecker version 1.1.1", so simply remove the prefix.
+            output.substringAfter("licensechecker version ")
+}
+
+class BoyterLc(config: ScannerConfiguration) : LocalScanner(config, BoyterLcCommand) {
     class Factory : AbstractScannerFactory<BoyterLc>() {
         override fun create(config: ScannerConfiguration) = BoyterLc(config)
     }
 
-    override val scannerVersion = "1.3.1"
+    // This is used in bootstrap() which is called by the base classes' constructor, so it has to have a getter to get
+    // dynamically evaluated before this scanner is fully initialized.
+    override val requiredVersion
+        get() = "1.3.1"
+
     override val resultFileExt = "json"
 
     val CONFIGURATION_OPTIONS = listOf(
             "--confidence", "0.95", // Cut-off value to only get most relevant matches.
             "--format", "json"
     )
-
-    override fun command(workingDir: File?) = if (OS.isWindows) "lc.exe" else "lc"
-
-    override fun getVersion(dir: File): String {
-        val cmd = command()
-        val tool = object : CommandLineTool {
-            override fun command(workingDir: File?) = dir.resolve(cmd).absolutePath
-        }
-
-        return tool.getVersion(transform = {
-            // "lc --version" returns a string like "licensechecker version 1.1.1", so simply remove the prefix.
-            it.substringAfter("licensechecker version ")
-        })
-    }
 
     override fun bootstrap(): File {
         val platform = when {
@@ -86,7 +83,7 @@ class BoyterLc(config: ScannerConfiguration) : LocalScanner(config) {
             else -> throw IllegalArgumentException("Unsupported operating system.")
         }
 
-        val url = "https://github.com/boyter/lc/releases/download/v$scannerVersion/lc-$scannerVersion-$platform.zip"
+        val url = "https://github.com/boyter/lc/releases/download/v$requiredVersion/lc-$requiredVersion-$platform.zip"
 
         log.info { "Downloading $this from '$url'... " }
 
@@ -115,7 +112,7 @@ class BoyterLc(config: ScannerConfiguration) : LocalScanner(config) {
             if (!OS.isWindows) {
                 // The Linux version is distributed as a ZIP, but our ZIP unpacker seems to be unable to properly handle
                 // Unix mode bits.
-                File(unpackDir, command()).setExecutable(true)
+                File(unpackDir, scanner.command()).setExecutable(true)
             }
 
             unpackDir
@@ -126,29 +123,16 @@ class BoyterLc(config: ScannerConfiguration) : LocalScanner(config) {
 
     override fun scanPath(scannerDetails: ScannerDetails, path: File, provenance: Provenance, resultsFile: File)
             : ScanResult {
-        val startTime = Instant.now()
+        try {
+            val startTime = Instant.now()
+            scanner.run(*CONFIGURATION_OPTIONS.toTypedArray(), "--output", resultsFile.absolutePath, path.absolutePath)
+            val endTime = Instant.now()
 
-        val process = ProcessCapture(
-                scannerPath.absolutePath,
-                *CONFIGURATION_OPTIONS.toTypedArray(),
-                "--output", resultsFile.absolutePath,
-                path.absolutePath
-        )
-
-        val endTime = Instant.now()
-
-        if (process.stderr.isNotBlank()) {
-            log.debug { process.stderr }
-        }
-
-        with(process) {
-            if (isSuccess) {
-                val result = getResult(resultsFile)
-                val summary = generateSummary(startTime, endTime, result)
-                return ScanResult(provenance, scannerDetails, summary, result)
-            } else {
-                throw ScanException(errorMessage)
-            }
+            val result = getResult(resultsFile)
+            val summary = generateSummary(startTime, endTime, result)
+            return ScanResult(provenance, scannerDetails, summary, result)
+        } catch (e: IOException) {
+            throw ScanException(e.message)
         }
     }
 

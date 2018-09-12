@@ -43,9 +43,8 @@ import com.here.ort.model.ScannerRun
 import com.here.ort.model.config.RepositoryConfiguration
 import com.here.ort.model.config.ScannerConfiguration
 import com.here.ort.model.mapper
-import com.here.ort.utils.CommandLineTool
+import com.here.ort.utils.CommandLineTool2
 import com.here.ort.utils.collectMessages
-import com.here.ort.utils.getPathFromEnvironment
 import com.here.ort.utils.log
 import com.here.ort.utils.safeMkdirs
 import com.here.ort.utils.showStackTrace
@@ -58,53 +57,34 @@ import java.time.Instant
  * Implementation of [Scanner] for scanners that operate locally. Packages passed to [scan] are processed in serial
  * order. Scan results can be cached in a [ScanResultsCache].
  */
-abstract class LocalScanner(config: ScannerConfiguration) : Scanner(config), CommandLineTool {
+abstract class LocalScanner(config: ScannerConfiguration, protected val scanner: CommandLineTool2) : Scanner(config) {
+    /**
+     * The required version of the scanner. This is also the version that would get bootstrapped.
+     */
+    protected abstract val requiredVersion: String
+
     /**
      * A property containing the file name extension of the scanner's native output format, without the dot.
      */
     protected abstract val resultFileExt: String
 
-    /**
-     * The directory the scanner was bootstrapped to, if so.
-     */
-    protected val scannerDir by lazy {
-        val scannerExe = command()
+    init {
+        if (scanner.path == null || scanner.getVersion() != requiredVersion) {
+            if (scanner.command().isNotEmpty()) {
+                log.info { "Bootstrapping scanner '$this' as required version $requiredVersion was not found in PATH." }
 
-        getPathFromEnvironment(scannerExe)?.parentFile?.takeIf {
-            getVersion(it) == scannerVersion
-        } ?: run {
-            if (scannerExe.isNotEmpty()) {
-                log.info { "Bootstrapping scanner '$this' as required version $scannerVersion was not found in PATH." }
+                scanner.path = bootstrap()
 
-                bootstrap().also {
-                    val actualScannerVersion = getVersion(it)
-                    if (actualScannerVersion != scannerVersion) {
-                        throw IOException("Bootstrapped scanner version $actualScannerVersion " +
-                                "does not match expected version $scannerVersion.")
-                    }
+                val bootstrappedVersion = scanner.getVersion()
+                if (bootstrappedVersion != requiredVersion) {
+                    throw IOException("Bootstrapped scanner version $bootstrappedVersion " +
+                            "does not match expected version $requiredVersion.")
                 }
             } else {
                 log.info { "Skipping to bootstrap scanner '$this' as it has no executable." }
-
-                File("")
             }
         }
     }
-
-    /**
-     * The required version of the scanner. This is also the version that would get bootstrapped.
-     */
-    protected abstract val scannerVersion: String
-
-    /**
-     * The full path to the scanner executable.
-     */
-    protected val scannerPath by lazy { File(scannerDir, command()) }
-
-    /**
-     * Return the actual version of the scanner, or an empty string in case of failure.
-     */
-    abstract fun getVersion(dir: File = scannerDir): String
 
     /**
      * Bootstrap the scanner to be ready for use, like downloading and / or configuring it.
@@ -126,7 +106,7 @@ abstract class LocalScanner(config: ScannerConfiguration) : Scanner(config), Com
     /**
      * Return the [ScannerDetails] of this [LocalScanner].
      */
-    fun getDetails() = ScannerDetails(getName(), getVersion(), getConfiguration())
+    fun getDetails() = ScannerDetails(getName(), scanner.getVersion(), getConfiguration())
 
     override fun scan(packages: List<Package>, outputDirectory: File, downloadDirectory: File?)
             : Map<Package, List<ScanResult>> {

@@ -95,3 +95,61 @@ interface CommandLineTool {
         }
     }
 }
+
+/**
+ * A class to implement running of command line tools.
+ */
+abstract class CommandLineTool2 {
+    /**
+     * Return the name of the executable command. As the preferred command might depend on the directory to operate in
+     * the [workingDir] can be provided.
+     */
+    abstract fun command(workingDir: File? = null): String
+
+    /**
+     * The path to the command. If null, the path is unknown which means the command is neither available in the
+     * system's PATH environment, nor has the path been explicitly set.
+     */
+    var path: File? = null
+        get() = field ?: getPathFromEnvironment(command())?.parentFile
+
+    /**
+     * Run this command with arguments [args] in the [workingDir] directory and the given [environment] variables.
+     */
+    fun run(vararg args: String, workingDir: File? = null, environment: Map<String, String> = emptyMap())
+            : ProcessCapture {
+        val commandPath = command(workingDir).let { path?.resolve(it)?.absolutePath ?: it }
+        return ProcessCapture(commandPath, *args, workingDir = workingDir, environment = environment).requireSuccess()
+    }
+
+    /**
+     * Run this command in the [workingDir] directory with arguments [args].
+     */
+    fun run(workingDir: File?, vararg args: String) = run(*args, workingDir = workingDir)
+
+    /**
+     * The argument to pass to the command in order to get its version information.
+     */
+    protected open val versionArguments: String = "--version"
+
+    /**
+     * Transform the command's output to extract its version string.
+     */
+    protected open fun transformVersion(output: String): String = output
+
+    /**
+     * Get the command's version, running in the [workingDir] directory.
+     */
+    fun getVersion(workingDir: File? = null): String {
+        val version = run(workingDir, *versionArguments.split(' ').toTypedArray())
+
+        // Some tools actually report the version to stderr, so try that as a fallback.
+        val versionString = sequenceOf(version.stdout, version.stderr).map {
+            transformVersion(it.trim())
+        }.find {
+            it.isNotBlank()
+        }
+
+        return versionString ?: ""
+    }
+}

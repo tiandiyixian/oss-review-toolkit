@@ -35,10 +35,9 @@ import com.here.ort.scanner.LocalScanner
 import com.here.ort.scanner.ScanException
 import com.here.ort.scanner.AbstractScannerFactory
 import com.here.ort.scanner.HTTP_CACHE_PATH
-import com.here.ort.utils.CommandLineTool
+import com.here.ort.utils.CommandLineTool2
 import com.here.ort.utils.OkHttpClientHelper
 import com.here.ort.utils.OS
-import com.here.ort.utils.ProcessCapture
 import com.here.ort.utils.log
 
 import java.io.File
@@ -50,14 +49,7 @@ import okhttp3.Request
 
 import okio.Okio
 
-class Askalono(config: ScannerConfiguration) : LocalScanner(config) {
-    class Factory : AbstractScannerFactory<Askalono>() {
-        override fun create(config: ScannerConfiguration) = Askalono(config)
-    }
-
-    override val scannerVersion = "0.2.0"
-    override val resultFileExt = "txt"
-
+object AskalonoCommand : CommandLineTool2() {
     override fun command(workingDir: File?): String {
         val extension = when {
             OS.isLinux -> "linux"
@@ -69,21 +61,26 @@ class Askalono(config: ScannerConfiguration) : LocalScanner(config) {
         return "askalono.$extension"
     }
 
-    override fun getVersion(dir: File): String {
-        val cmd = command()
-        val tool = object : CommandLineTool {
-            override fun command(workingDir: File?) = dir.resolve(cmd).absolutePath
-        }
-
-        return tool.getVersion(transform = {
+    override fun transformVersion(output: String) =
             // "askalono --version" returns a string like "askalono 0.2.0-beta.1", so simply remove the prefix.
-            it.substringAfter("askalono ")
-        })
+            output.substringAfter("askalono ")
+}
+
+class Askalono(config: ScannerConfiguration) : LocalScanner(config, AskalonoCommand) {
+    class Factory : AbstractScannerFactory<Askalono>() {
+        override fun create(config: ScannerConfiguration) = Askalono(config)
     }
 
+    // This is used in bootstrap() which is called by the base classes' constructor, so it has to have a getter to get
+    // dynamically evaluated before this scanner is fully initialized.
+    override val requiredVersion
+        get() = "0.2.0"
+
+    override val resultFileExt = "txt"
+
     override fun bootstrap(): File {
-        val scannerExe = command()
-        val url = "https://github.com/amzn/askalono/releases/download/$scannerVersion/$scannerExe"
+        val name = scanner.command()
+        val url = "https://github.com/amzn/askalono/releases/download/$requiredVersion/$name"
 
         log.info { "Downloading $this from '$url'... " }
 
@@ -100,10 +97,9 @@ class Askalono(config: ScannerConfiguration) : LocalScanner(config) {
                 log.info { "Retrieved $this from local cache." }
             }
 
-            val scannerDir = createTempDir()
-            scannerDir.deleteOnExit()
+            val scannerDir = createTempDir().apply { deleteOnExit() }
 
-            val scannerFile = File(scannerDir, scannerExe)
+            val scannerFile = File(scannerDir, name)
             Okio.buffer(Okio.sink(scannerFile)).use { it.writeAll(body.source()) }
 
             if (!OS.isWindows) {
@@ -119,28 +115,17 @@ class Askalono(config: ScannerConfiguration) : LocalScanner(config) {
 
     override fun scanPath(scannerDetails: ScannerDetails, path: File, provenance: Provenance, resultsFile: File)
             : ScanResult {
-        val startTime = Instant.now()
+        try {
+            val startTime = Instant.now()
+            val process = scanner.run("crawl", path.absolutePath)
+            val endTime = Instant.now()
 
-        val process = ProcessCapture(
-                scannerPath.absolutePath,
-                "crawl", path.absolutePath
-        )
-
-        val endTime = Instant.now()
-
-        if (process.stderr.isNotBlank()) {
-            log.debug { process.stderr }
-        }
-
-        with(process) {
-            if (isSuccess) {
-                stdoutFile.copyTo(resultsFile)
-                val result = getResult(resultsFile)
-                val summary = generateSummary(startTime, endTime, result)
-                return ScanResult(provenance, scannerDetails, summary, result)
-            } else {
-                throw ScanException(errorMessage)
-            }
+            process.stdoutFile.copyTo(resultsFile)
+            val result = getResult(resultsFile)
+            val summary = generateSummary(startTime, endTime, result)
+            return ScanResult(provenance, scannerDetails, summary, result)
+        } catch (e: IOException) {
+            throw ScanException(e.message)
         }
     }
 

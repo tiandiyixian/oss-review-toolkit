@@ -467,7 +467,11 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
         }
 
         // Install all NPM dependencies to enable NPM to list dependencies.
-        run(workingDir, "install", "--ignore-scripts")
+        if (lockFiles.isEmpty()) {
+            run(workingDir, "install", "--ignore-scripts")
+        } else {
+            run(workingDir, "ci")
+        }
 
         // TODO: capture warnings from npm output, e.g. "Unsupported platform" which happens for fsevents on all
         // platforms except for Mac.

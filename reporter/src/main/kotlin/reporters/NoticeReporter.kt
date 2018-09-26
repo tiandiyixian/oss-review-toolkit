@@ -57,9 +57,20 @@ class NoticeReporter : Reporter() {
             }
         }
 
-        val findingsIterator = allFindings.filterNot { (license, _) ->
+        val allDeclaredLicenses = ortResult.analyzer?.result?.packages?.flatMap { curated ->
+            curated.pkg.declaredLicenses
+        } ?: emptySet<String>()
+
+        val findingsWithoutLicenseRefs = allFindings.filterNot { (license, _) ->
             // For now, just skip license references for which SPDX has no license text.
             license.startsWith("LicenseRef-")
+        }
+
+        // TODO: Maybe introduce a function argument that toggles this filtering.
+        val findingsIterator = findingsWithoutLicenseRefs.filter { (license, _) ->
+            // Only consider detected licenses that also are declared licenses. We associate detected and declared
+            // licenses this way as otherwise we would not know which copyrights to use for which declared license.
+            license !in allDeclaredLicenses
         }.iterator()
 
         if (!findingsIterator.hasNext()) {

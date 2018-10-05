@@ -59,6 +59,7 @@ object Main : CommandWithHelp() {
             programName = TOOL_NAME
             addCommand(AnalyzerCommand)
             addCommand(DownloaderCommand)
+            addCommand(EvaluatorCommand)
             addCommand(ReporterCommand)
             addCommand(RequirementsCommand)
             addCommand(ScannerCommand)

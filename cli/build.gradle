@@ -23,6 +23,10 @@ dependencies {
     compile project(':utils')
 
     compile "com.beust:jcommander:$jcommanderVersion"
-    compile 'org.jetbrains.kotlin:kotlin-reflect'
     compile "org.reflections:reflections:$reflectionsVersion"
+    compile 'org.jetbrains.kotlin:kotlin-reflect'
+
+    compile 'org.jetbrains.kotlin:kotlin-compiler-embeddable'
+    compile 'org.jetbrains.kotlin:kotlin-script-runtime'
+    compile 'org.jetbrains.kotlin:kotlin-script-util'
 }

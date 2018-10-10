@@ -19,10 +19,14 @@
 
 package com.here.ort.analyzer.managers
 
+import com.fasterxml.jackson.databind.node.ObjectNode
+
 import com.here.ort.analyzer.AbstractPackageManagerFactory
 import com.here.ort.model.config.AnalyzerConfiguration
 import com.here.ort.model.config.RepositoryConfiguration
+import com.here.ort.model.readValue
 import com.here.ort.utils.OS
+import com.here.ort.utils.getCommonFilePrefix
 
 import com.vdurmont.semver4j.Requirement
 
@@ -49,13 +53,18 @@ class Yarn(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConfigur
     override fun getVersionRequirement(): Requirement = Requirement.buildNPM("1.3.* - 1.9.*")
 
     override fun prepareResolution(definitionFiles: List<File>): List<File> {
+        val projectRoot = getCommonFilePrefix(definitionFiles)
+
+        val hasWorkspaces = projectRoot.let {
+            val json = it.resolve("package.json").readValue<ObjectNode>()
+            json.has("workspaces")
+        }
+
         // Only keep those definition files that are accompanied by a Yarn lock file.
         val yarnDefinitionFiles = definitionFiles.filter { definitionFile ->
-            val existingYarnLockFiles = recognizedLockFiles.mapNotNull { lockFileName ->
-                definitionFile.resolveSibling(lockFileName).takeIf { it.isFile }
+            YARN_LOCK_FILES.any {
+                definitionFile.resolveSibling(it).isFile || (hasWorkspaces && projectRoot.resolve(it).isFile)
             }
-
-            existingYarnLockFiles.isNotEmpty()
         }
 
         if (yarnDefinitionFiles.isNotEmpty()) {

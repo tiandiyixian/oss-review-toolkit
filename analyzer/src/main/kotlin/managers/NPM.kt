@@ -45,6 +45,7 @@ import com.here.ort.model.readValue
 import com.here.ort.utils.CommandLineTool
 import com.here.ort.utils.OS
 import com.here.ort.utils.OkHttpClientHelper
+import com.here.ort.utils.getCommonFilePrefix
 import com.here.ort.utils.textValueOrEmpty
 import com.here.ort.utils.log
 import com.here.ort.utils.stashDirectories
@@ -123,9 +124,18 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
     override fun getVersionRequirement(): Requirement = Requirement.buildNPM("5.5.* - 6.4.*")
 
     override fun prepareResolution(definitionFiles: List<File>): List<File> {
+        val projectRoot = getCommonFilePrefix(definitionFiles)
+
+        val hasWorkspaces = projectRoot.let {
+            val json = it.resolve("package.json").readValue<ObjectNode>()
+            json.has("workspaces")
+        }
+
         // Only keep those definition files that are not accompanied by a Yarn lock file.
         val npmDefinitionFiles = definitionFiles.filterNot { definitionFile ->
-            YARN_LOCK_FILES.any { definitionFile.resolveSibling(it).isFile }
+            YARN_LOCK_FILES.any {
+                definitionFile.resolveSibling(it).isFile || (hasWorkspaces && projectRoot.resolve(it).isFile)
+            }
         }
 
         if (npmDefinitionFiles.isNotEmpty()) {
@@ -404,6 +414,8 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
                 parentModulesDir = parentModulesDir.parentFile
             }
 
+            // E.g. when using Yarn workspaces, the dependencies of the projects are consolidated in a single top-level
+            // "node_modules" directory for de-duplication, so go up.
             log.info {
                 "Could not find package file for '$name' in '${startModulesDir.absolutePath}', looking in " +
                         "'${parentModulesDir.absolutePath}' instead."
@@ -463,8 +475,15 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
      * Install dependencies using the given package manager command.
      */
     private fun installDependencies(workingDir: File) {
-        val existingLockFiles = recognizedLockFiles.filter {
-            File(workingDir, it).isFile
+        val hasWorkspaces = projectRoot?.let {
+            val json = it.resolve("package.json").readValue<ObjectNode>()
+            json.has("workspaces")
+        } ?: false
+
+        // Workspaces share a common lock file in the project root.
+        val lockFileDir = if (hasWorkspaces) projectRoot else workingDir
+        val existingLockFiles =  recognizedLockFiles.filter {
+            File(lockFileDir, it).isFile
         }
 
         if (!analyzerConfig.allowDynamicVersions) {
@@ -473,7 +492,7 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
                         "No lockfile found in '${workingDir.invariantSeparatorsPath}'. This potentially results in " +
                         "unstable versions of dependencies. To allow this, enable support for dynamic versions."
                 )
-                else -> log.debug { "Found the following lockfile(s): $existingLockFiles." }
+                else -> log.info { "Found the following lockfile(s): $existingLockFiles." }
             }
         }
 

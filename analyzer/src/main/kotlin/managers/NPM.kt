@@ -475,15 +475,18 @@ open class NPM(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConf
      * Install dependencies using the given package manager command.
      */
     private fun installDependencies(workingDir: File) {
-        val hasWorkspaces = projectRoot?.let {
+        /*val hasWorkspaces = projectRoot?.let {
             val json = it.resolve("package.json").readValue<ObjectNode>()
             json.has("workspaces")
         } ?: false
 
         // Workspaces share a common lock file in the project root.
-        val lockFileDir = if (hasWorkspaces) projectRoot else workingDir
+        val lockFileDir = if (hasWorkspaces) projectRoot else workingDir*/
+        if (true) {
+            throw IOException("No!")
+        }
         val existingLockFiles =  recognizedLockFiles.filter {
-            File(lockFileDir, it).isFile
+            File(workingDir, it).isFile
         }
 
         if (!analyzerConfig.allowDynamicVersions) {

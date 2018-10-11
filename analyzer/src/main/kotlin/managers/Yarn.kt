@@ -31,6 +31,7 @@ import com.here.ort.utils.getCommonFilePrefix
 import com.vdurmont.semver4j.Requirement
 
 import java.io.File
+import java.nio.file.FileSystems
 
 val YARN_LOCK_FILES = listOf("yarn.lock")
 
@@ -55,15 +56,17 @@ class Yarn(analyzerConfig: AnalyzerConfiguration, repoConfig: RepositoryConfigur
     override fun prepareResolution(definitionFiles: List<File>): List<File> {
         val projectRoot = getCommonFilePrefix(definitionFiles)
 
-        val hasWorkspaces = projectRoot.let {
-            val json = it.resolve("package.json").readValue<ObjectNode>()
-            json.has("workspaces")
-        }
+        val rootPackageJson = projectRoot.resolve("package.json").readValue<ObjectNode>()
+        val workspaceMatchers = rootPackageJson["workspaces"]?.map {
+            FileSystems.getDefault().getPathMatcher("glob:**/${it.textValue()}")
+        }.orEmpty()
 
-        // Only keep those definition files that are accompanied by a Yarn lock file.
+        // Only keep those definition files that are accompanied by a Yarn lock file. This deliberately also omits
+        // definition files without lock files in paths managed by Yarn workspaces.
         val yarnDefinitionFiles = definitionFiles.filter { definitionFile ->
-            YARN_LOCK_FILES.any {
-                definitionFile.resolveSibling(it).isFile || (hasWorkspaces && projectRoot.resolve(it).isFile)
+            YARN_LOCK_FILES.any { lockFile ->
+                definitionFile.resolveSibling(lockFile).isFile ||
+                        workspaceMatchers.any { it.matches(definitionFile.toPath()) }
             }
         }
 
